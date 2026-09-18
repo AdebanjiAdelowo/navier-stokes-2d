@@ -3,7 +3,8 @@
 A verified pseudo-spectral solver for the 2D incompressible Navier-Stokes equations on a doubly
 periodic domain, validated against the Taylor-Green vortex exact solution and a symbolically
 derived manufactured solution, with a second benchmark (freely decaying 2D turbulence) assessed
-through physical conservation diagnostics and spatial self-convergence.
+through physical diagnostics (incompressibility, the viscous energy-dissipation budget) and spatial
+self-convergence.
 
 ## Overview
 
@@ -11,8 +12,9 @@ This project implements and validates a classical numerical method for 2D incomp
 rather than proposing a new one. The goal is to demonstrate the complete workflow expected of a
 credible numerical-PDE implementation: formulate the equations, choose and justify a discretisation,
 implement it as reusable code, verify it against problems with known answers (an exact solution and
-a manufactured solution), quantify convergence rates, check physical conservation laws, and only
-then use the solver for a genuine flow-physics experiment.
+a manufactured solution), quantify convergence rates, verify physical diagnostics (incompressibility,
+the viscous energy-dissipation budget), and only then use the solver for a genuine flow-physics
+experiment.
 
 ## Mathematical problem
 
@@ -268,8 +270,9 @@ multi-threading, or "real-time" performance is made; none was tested.
   benchmark) require a different solver; see the companion FEM project planned for that case.
 - **Decaying-turbulence initial spectrum is not matched to a specific literature reference**, so the
   turbulence benchmark's snapshots and decay curves are validated as *physically consistent*
-  (conservation laws, self-convergence), not as a quantitative reproduction of a published turbulence
-  statistic (e.g. a specific inverse-cascade slope).
+  (incompressibility, the viscous energy-dissipation budget, self-convergence), not as a
+  quantitative reproduction of a published turbulence statistic (e.g. a specific inverse-cascade
+  slope).
 - **Single random seed** for the turbulence benchmark; no ensemble averaging over initial conditions.
 - CPU-only; no distributed- or GPU-computing was implemented or benchmarked.
 
