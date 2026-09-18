@@ -1,0 +1,10 @@
+# Higher-resolution, longer-time configuration. Several tens of seconds on
+# an Apple M3 Pro laptop (measured; see README Computational performance).
+decaying_turbulence:
+  N: 256
+  nu: 0.005
+  dt: 1.0e-3
+  t_end: 6.0
+  k0: 10.0
+  seed: 7
+  n_snapshots: 5

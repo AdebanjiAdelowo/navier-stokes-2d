@@ -6,8 +6,10 @@ from .solver import run, RunResult
 from .diagnostics import kinetic_energy, enstrophy, divergence_l2, max_divergence
 from .exact import taylor_green_omega, taylor_green_velocity
 from .manufactured import ManufacturedSolution
+from .initial_conditions import random_vorticity_field
 
 __all__ = [
+    "random_vorticity_field",
     "SpectralGrid",
     "SimParams",
     "poisson_solve",

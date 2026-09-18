@@ -1,0 +1,9 @@
+# Default laptop-scale configuration for the decaying-2D-turbulence example.
+decaying_turbulence:
+  N: 128
+  nu: 0.01
+  dt: 2.0e-3
+  t_end: 4.0
+  k0: 8.0
+  seed: 7
+  n_snapshots: 5

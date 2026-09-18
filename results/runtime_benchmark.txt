@@ -1,0 +1,13 @@
+Platform: macOS-26.6.2-arm64-arm-64bit
+CPU: Apple M3 Pro
+Python: 3.12.2
+NumPy: 2.0.0
+Precision: float64 (complex128 in Fourier space), CPU only, single-threaded numpy.fft
+
+warm-up steps: 5, timed steps per repeat: 30, repeats: 3
+
+    N    median ms/step    min ms/step    max ms/step
+   32             0.420          0.419          0.424
+   64             0.817          0.801          0.819
+  128             2.626          2.623          2.633
+  256            12.603         11.575         12.735

@@ -1,0 +1,7 @@
+Temporal convergence, two-mode manufactured solution, N=64 (fully resolved), t_end=0.2
+        dt    rel L2 error   observed order
+   0.02000      5.1597e-11               --
+   0.01000      3.2250e-12            4.000
+   0.00500      2.0198e-13            3.997
+   0.00250      1.3620e-14            3.890
+   0.00125      4.4753e-15            1.606

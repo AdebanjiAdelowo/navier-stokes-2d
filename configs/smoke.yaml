@@ -1,0 +1,9 @@
+# Fast sanity-check configuration; should finish in well under a minute on a laptop.
+decaying_turbulence:
+  N: 48
+  nu: 0.02
+  dt: 2.0e-3
+  t_end: 0.2
+  k0: 6.0
+  seed: 7
+  n_snapshots: 4

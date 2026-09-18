@@ -1,0 +1,5 @@
+N=48 nu=0.02 k0=6.0 t_end=0.2 dt=0.002 seed=7
+E(0)=0.027922 E(t_end)=0.021386
+Omega(0)=1.000000 Omega(t_end)=0.663817
+max|div(u)| (sampled)=1.490377e-17
+max relative energy-budget mismatch=3.303433e-06
