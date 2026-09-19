@@ -1,0 +1,6 @@
+POD projection-error baseline (local config): grid 64x64, 465 total modes
+
+   r  cum. energy    train err  unseen_ic err  unseen_nu err  unseen_nu_same_ic err
+   4     0.982202 1.338029e-01   9.949123e-01   9.958585e-01           3.161424e-01
+   8     0.999848 9.764843e-03   9.855582e-01   9.904553e-01           5.719086e-02
+  16     1.000000 3.305038e-05   9.838545e-01   9.834093e-01           4.065467e-02

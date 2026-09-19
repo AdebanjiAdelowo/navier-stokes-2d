@@ -1,0 +1,5 @@
+POD projection-error baseline (smoke config): grid 24x24, 62 total modes
+
+   r  cum. energy    train err  unseen_ic err  unseen_nu err  unseen_nu_same_ic err
+   2     0.998593 3.276245e-02   9.917866e-01   9.988109e-01           7.393766e-02
+   4     0.999999 8.598174e-04   9.854421e-01   9.961677e-01           1.342780e-02

@@ -7,3 +7,18 @@ decaying_turbulence:
   k0: 6.0
   seed: 7
   n_snapshots: 4
+
+# Project 6: POD-Galerkin ROM. Fast end-to-end pipeline check, not representative results.
+rom:
+  training:
+    - {label: train1, N: 24, nu: 0.02, dt: 2.0e-3, t_end: 0.3, k0: 5.0, seed: 1, n_snapshots: 30}
+    - {label: train2, N: 24, nu: 0.02, dt: 2.0e-3, t_end: 0.3, k0: 5.0, seed: 2, n_snapshots: 30}
+  unseen_ic: {label: unseen_ic, N: 24, nu: 0.02, dt: 2.0e-3, t_end: 0.3, k0: 5.0, seed: 99, n_snapshots: 30}
+  unseen_nu: {label: unseen_nu, N: 24, nu: 0.04, dt: 2.0e-3, t_end: 0.3, k0: 5.0, seed: 777, n_snapshots: 30}
+  # control: SAME phase/seed as train1, only nu changed -- isolates the parameter effect from the
+  # phase/IC-randomness effect (see README "Unseen-condition evaluation").
+  unseen_nu_same_ic: {label: unseen_nu_same_ic, N: 24, nu: 0.04, dt: 2.0e-3, t_end: 0.3, k0: 5.0, seed: 1, n_snapshots: 30}
+  ranks: [2, 4]
+  deim_ranks: [4, 8]
+  rom_dt: 2.0e-3
+  rom_save_every: 2
