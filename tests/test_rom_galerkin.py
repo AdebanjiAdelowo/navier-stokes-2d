@@ -4,7 +4,7 @@ from src.rom.snapshots import TrajectorySpec, build_snapshot_ensemble
 from src.rom.pod import compute_pod_basis, l2_inner_product
 from src.rom.galerkin import (
     build_galerkin_operators, reduced_rhs, projected_fom_rhs, verify_operators, integrate_rom,
-    laplacian_of, spectral_partials,
+    integrate_rom_with_nonlinear, laplacian_of, spectral_partials,
 )
 
 
@@ -71,6 +71,25 @@ def test_rom_integration_is_deterministic():
     res2 = integrate_rom(ops, a0, dt=2e-3, t_end=0.1, save_every=5)
     assert np.array_equal(res1.a, res2.a)
     assert res1.stable and res2.stable
+
+
+def test_naive_baseline_matches_tensor_rom_trajectory():
+    """The "naive" reconstruct-and-call-FOM-RHS baseline (section 6's explicit intermediate
+    baseline) and the exact tensorized ROM are mathematically equivalent evaluations of the SAME
+    reduced ODE (see galerkin.py module docstring) -- they should therefore produce essentially
+    identical trajectories, differing only by floating-point round-off, despite the naive baseline
+    being far more expensive per step (see scripts/rom_performance_benchmark.py)."""
+    ens, basis = _basis(r=5)
+    ops = build_galerkin_operators(basis.Phi, ens.grid, nu=0.02, dealias=True)
+    a0 = basis.coefficients[:, 0]
+
+    tensor_res = integrate_rom(ops, a0, dt=2e-3, t_end=0.1, save_every=5)
+
+    def naive_nl(a):
+        return projected_fom_rhs(a, basis.Phi, ens.grid, ops.nu, ops.dealias) - ops.A_lin @ a
+    naive_res = integrate_rom_with_nonlinear(ops.A_lin, naive_nl, a0, dt=2e-3, t_end=0.1, save_every=5)
+
+    assert np.allclose(tensor_res.a, naive_res.a, atol=1e-8, rtol=1e-6)
 
 
 def test_rom_integration_reduces_to_linear_decay_when_quadratic_term_disabled():

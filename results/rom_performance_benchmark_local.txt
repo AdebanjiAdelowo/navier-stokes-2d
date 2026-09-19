@@ -1,0 +1,27 @@
+Platform: macOS-26.6.2-arm64-arm-64bit
+CPU: Apple M3 Pro
+Python: 3.12.2
+NumPy: 2.0.0
+Precision: float64/complex128, CPU only, single-threaded
+
+grid N=64, nu=0.01, dt=0.001, warm-up steps=5, timed steps/repeat=30, repeats=3
+
+-- offline cost (one-time, r=16, m=24) --
+POD SVD (state basis):                0.0970 s
+Galerkin tensor construction:          0.0459 s
+nonlinear-snapshot construction:        0.1221 s
+DEIM basis + point selection:          0.0878 s
+total offline (excl. FOM snapshot generation, timed separately in scripts/rom_generate_snapshots.py):   0.3528 s
+
+-- online cost: median/min/max ms per 0.0300 simulated time units (30 steps), r=16, m=24 --
+          method   median(ms)    min(ms)    max(ms)  speed-up vs FOM
+             FOM      26.3467    26.1555    26.4218             1.00
+      tensor ROM       1.3186     1.3185     1.4495            19.98
+  naive baseline      87.4478    78.5982    94.0494             0.30
+        DEIM ROM       1.8762     1.8696     1.8897            14.04
+
+-- accuracy vs. speed-up across state rank (tensor ROM, full training trajectory) --
+   r   mean state err   online speed-up vs FOM
+   4     1.599377e-01                    33.20
+   8     2.984846e-03                    40.24
+  16     3.104627e-05                    20.95

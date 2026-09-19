@@ -1,0 +1,11 @@
+Galerkin reduced-operator verification (full config): grid 96x96
+
+   r  dealias   max |tensor - projected FOM RHS|    typical RHS magnitude     relative
+   4     True                       4.440892e-16             5.318117e-01 8.350497e-16
+   4    False                       5.551115e-16             5.318117e-01 1.043812e-15
+   8     True                       4.440892e-16             6.256597e-01 7.097936e-16
+   8    False                       4.440892e-16             6.256597e-01 7.097936e-16
+  16     True                       5.551115e-15             9.332263e-01 5.948305e-15
+  16    False                       3.552714e-15             9.332263e-01 3.806915e-15
+  32     True                       1.421085e-14             4.854328e+00 2.927461e-15
+  32    False                       1.110223e-14             4.854339e+00 2.287074e-15

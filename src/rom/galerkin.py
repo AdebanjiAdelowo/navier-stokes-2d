@@ -194,16 +194,17 @@ class ROMResult:
     stable: bool  # False if the trajectory was aborted due to non-finite coefficients
 
 
-def integrate_rom(ops: GalerkinOperators, a0: np.ndarray, dt: float, t_end: float,
-                   save_every: int = 1) -> ROMResult:
-    """Matrix-exponential integrating-factor RK4 for da/dt = A_lin @ a + Q:a x a (see module
-    docstring). Aborts early (flagging `stable=False`) if coefficients become non-finite, rather than
-    letting NaNs silently propagate through downstream diagnostics."""
-    E_half = expm(ops.A_lin * dt / 2.0)
-    E_full = expm(ops.A_lin * dt)
-
-    def N(a):
-        return np.einsum("kij,i,j->k", ops.Q, a, a)
+def integrate_rom_with_nonlinear(A_lin: np.ndarray, nonlinear_fn, a0: np.ndarray, dt: float,
+                                  t_end: float, save_every: int = 1) -> ROMResult:
+    """Matrix-exponential integrating-factor RK4 for da/dt = A_lin @ a + nonlinear_fn(a), with the
+    nonlinear evaluation PLUGGABLE -- used to run the exact tensorized evaluation
+    (`reduced_rhs`'s quadratic term), the "naive" reconstruct-and-call-FOM-RHS baseline
+    (`projected_fom_rhs`'s nonlinear part), and the DEIM-hyper-reduced evaluation
+    (`deim.deim_nonlinear_rhs`) through the IDENTICAL time-stepping scheme, so accuracy/cost
+    comparisons between them isolate the nonlinear-evaluation method, not the integrator. Aborts
+    early (flagging `stable=False`) if coefficients become non-finite."""
+    E_half = expm(A_lin * dt / 2.0)
+    E_full = expm(A_lin * dt)
 
     n_steps = int(round(t_end / dt))
     a = a0.copy()
@@ -212,13 +213,13 @@ def integrate_rom(ops: GalerkinOperators, a0: np.ndarray, dt: float, t_end: floa
     stable = True
 
     for step in range(1, n_steps + 1):
-        N1 = N(a)
+        N1 = nonlinear_fn(a)
         Y2 = E_half @ a + (dt / 2.0) * (E_half @ N1)
-        N2 = N(Y2)
+        N2 = nonlinear_fn(Y2)
         Y3 = E_half @ a + (dt / 2.0) * N2
-        N3 = N(Y3)
+        N3 = nonlinear_fn(Y3)
         Y4 = E_full @ a + dt * (E_half @ N3)
-        N4 = N(Y4)
+        N4 = nonlinear_fn(Y4)
         a = E_full @ a + (dt / 6.0) * (E_full @ N1 + 2.0 * (E_half @ N2) + 2.0 * (E_half @ N3) + N4)
 
         if not np.all(np.isfinite(a)):
@@ -231,3 +232,11 @@ def integrate_rom(ops: GalerkinOperators, a0: np.ndarray, dt: float, t_end: floa
             a_list.append(a.copy())
 
     return ROMResult(t=np.array(t_list), a=np.array(a_list), stable=stable)
+
+
+def integrate_rom(ops: GalerkinOperators, a0: np.ndarray, dt: float, t_end: float,
+                   save_every: int = 1) -> ROMResult:
+    """The standard (exact-tensor) ROM integrator: da/dt = A_lin @ a + Q:a x a."""
+    def N(a):
+        return np.einsum("kij,i,j->k", ops.Q, a, a)
+    return integrate_rom_with_nonlinear(ops.A_lin, N, a0, dt, t_end, save_every)

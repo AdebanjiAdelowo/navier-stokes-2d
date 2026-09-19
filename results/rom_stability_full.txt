@@ -1,0 +1,11 @@
+ROM stability investigation (full config): integrated to 10x the training window (t_end=30.00 vs. training 3.00)
+
+   r       case  stable   max |a(t)|   final |a(t)|        max E      final E  monotonic decay
+   4      train    True   1.3619e+00     1.1947e-07   2.0317e-02   1.6193e-16             True
+   4  unseen_ic    True   3.0733e-02     2.9500e-09   1.0640e-05   9.7019e-20             True
+   8      train    True   1.4121e+00     5.4459e-05   1.5400e-02   5.5569e-11             True
+   8  unseen_ic    True   5.4774e-02     2.3810e-06   3.8079e-05   1.0545e-13             True
+  16      train    True   1.4142e+00     1.3258e-03   1.5769e-02   5.2615e-08             True
+  16  unseen_ic    True   1.0033e-01     1.5527e-04   2.2615e-04   7.2644e-10             True
+  32      train    True   1.4142e+00     7.6042e-03   1.5777e-02   2.5848e-06             True
+  32  unseen_ic    True   1.3573e-01     1.5093e-03   3.2747e-04   9.7391e-08             True

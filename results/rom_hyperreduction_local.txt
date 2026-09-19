@@ -1,0 +1,22 @@
+DEIM hyper-reduction study (local config): grid 64x64, state rank fixed at r=16
+
+-- DEIM error vs DEIM rank (state rank fixed) --
+   m   mean hyper-reduction error
+   8                 6.868663e-02
+  16                 2.511919e-04
+  24                 1.514760e-04
+
+-- DEIM error vs state rank (DEIM rank fixed at m=24) --
+   r   mean hyper-reduction error
+   4                 2.458744e-01
+   8                 1.876135e-02
+  16                 1.514760e-04
+
+-- dealiasing mismatch (dealiased vs undealiased projected nonlinear term, r=16) --
+relative difference: 9.407758e-05
+(this is what DEIM's implicit use of the undealiased advection costs relative to the trusted, dealiased tensorized ROM, at this config's resolution -- see README)
+
+-- error decomposition on the training trajectory (r=16, m=24) --
+mean Galerkin dynamical error (tensor ROM vs FOM):        3.104627e-05
+mean hyper-reduction error (DEIM ROM vs tensor ROM):      1.253535e-06
+(hyper-reduction error is much smaller than Galerkin dynamical error: DEIM adds little on top of an already-verified ROM, consistent with the tensor method already being exact for this quadratic nonlinearity -- see README)

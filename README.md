@@ -1,20 +1,30 @@
-# 2D Incompressible Navier-Stokes: Vorticity-Streamfunction Pseudo-Spectral Solver
+# 2D Incompressible Navier-Stokes: Pseudo-Spectral Solver and POD-Galerkin Reduced-Order Model
 
-A verified pseudo-spectral solver for the 2D incompressible Navier-Stokes equations on a doubly
-periodic domain, validated against the Taylor-Green vortex exact solution and a symbolically
+**Part I** is a verified pseudo-spectral solver for the 2D incompressible Navier-Stokes equations on
+a doubly periodic domain, validated against the Taylor-Green vortex exact solution and a symbolically
 derived manufactured solution, with a second benchmark (freely decaying 2D turbulence) assessed
 through physical diagnostics (incompressibility, the viscous energy-dissipation budget) and spatial
-self-convergence.
+self-convergence. **Part II** builds a POD-Galerkin reduced-order model (ROM) on top of this verified
+solver: snapshot generation, a proper-orthogonal-decomposition basis with an explicit
+projection-error baseline, a Galerkin-projected reduced dynamical system with independently-verified
+reduced operators, a stability investigation, DEIM hyper-reduction, and a quantified accuracy-speed
+trade-off.
 
 ## Overview
 
-This project implements and validates a classical numerical method for 2D incompressible flow
-rather than proposing a new one. The goal is to demonstrate the complete workflow expected of a
-credible numerical-PDE implementation: formulate the equations, choose and justify a discretisation,
+Part I implements and validates a classical numerical method for 2D incompressible flow rather than
+proposing a new one. The goal is to demonstrate the complete workflow expected of a credible
+numerical-PDE implementation: formulate the equations, choose and justify a discretisation,
 implement it as reusable code, verify it against problems with known answers (an exact solution and
 a manufactured solution), quantify convergence rates, verify physical diagnostics (incompressibility,
 the viscous energy-dissipation budget), and only then use the solver for a genuine flow-physics
+experiment. Part II treats this verified solver as a trusted full-order model (FOM) and demonstrates
+reduced-order modelling as applied mathematics: every reduction step (POD truncation, Galerkin
+projection, hyper-reduction) is derived, then checked against an independent reference BEFORE being
+trusted for the next step, exactly as Part I's own solver was checked before being used for a flow
 experiment.
+
+# Part I: Full-Order Pseudo-Spectral Solver
 
 ## Mathematical problem
 
@@ -276,12 +286,357 @@ multi-threading, or "real-time" performance is made; none was tested.
 - **Single random seed** for the turbulence benchmark; no ensemble averaging over initial conditions.
 - CPU-only; no distributed- or GPU-computing was implemented or benchmarked.
 
-## Reproducibility
+## Reproducibility (Part I)
 
 All runs use explicit, fixed random seeds (`numpy.random.default_rng(seed)`) where randomness is
 involved (`src/initial_conditions.py`), and `tests/test_solver.py::test_run_is_deterministic` checks
 bit-for-bit reproducibility of the time stepper. No GPU-nondeterminism is possible since everything
 runs on CPU in double precision.
+
+# Part II: POD-Galerkin Reduced-Order Model
+
+Part I's solver is treated here as a trusted, UNCHANGED full-order model (FOM); every Part I test and
+verification result above still passes (`src/` is only extended, in a new `src/rom/` subpackage, never
+modified). All numbers below are from the `full` configuration (`configs/full.yaml`,
+`python scripts/rom_*.py --config full`) unless stated otherwise; `smoke`/`local`-config numbers exist
+only to sanity-check the pipeline runs end-to-end quickly and are never reported as final results.
+
+## Snapshot generation
+
+Training data is a FAMILY of independent freely-decaying-turbulence FOM trajectories (not one
+trajectory), generated with `src/rom/snapshots.py` and reused unmodified by every downstream script:
+
+| ensemble | N | $\nu$ | $k_0$ | seed(s) | $t\in$ | snapshots | role |
+|---|---|---|---|---|---|---|---|
+| train | 96 | 0.008 | 8.0 | 1, 2, 3, 4 | [0, 3.0] | 1004 (251 each) | POD basis + Galerkin operators |
+| unseen_ic | 96 | 0.008 | 8.0 | 123 | [0, 3.0] | 251 | new phase, SAME $\nu$ as training |
+| unseen_nu | 96 | 0.008 $\to$ 0.016 | 8.0 | 777 | [0, 3.0] | 251 | new phase, DIFFERENT $\nu$ |
+| unseen_nu_same_ic | 96 | 0.016 | 8.0 | 1 | [0, 3.0] | 251 | control: SAME phase as train1, different $\nu$ |
+
+Every seed, resolution, viscosity, and time interval is saved as metadata alongside the snapshot
+arrays (`.npz`, `src/rom/snapshots.py:save_ensemble`), so every downstream figure/number traces back
+to an exact, reproducible FOM run; `tests/test_rom_snapshots.py` checks bit-for-bit reproducibility
+and that mismatched grid resolutions across trajectories raise rather than silently truncate.
+
+## POD formulation
+
+Given (training) snapshots $\{\omega_j\}$, POD seeks the rank-$r$ subspace minimizing
+
+$$\min_{\dim(V_r)=r} \sum_j \|\omega_j - P_{V_r}\omega_j\|_W^2, \qquad \|f\|_W^2 := \langle f,f\rangle,$$
+
+with $\langle f,g\rangle = (dx\,dy)\sum f g$ the discrete $L^2$ inner product already used by
+`src.diagnostics.kinetic_energy`/`enstrophy` on this uniform periodic grid (rectangle-rule quadrature,
+spectrally accurate for smooth periodic fields). Because $dx\,dy =: c$ is a SINGLE constant here (a
+uniform grid), the weighted problem reduces exactly to the ordinary (Euclidean) SVD of the flattened
+snapshot matrix $X=U\Sigma V^T$, with the $W$-orthonormal POD modes $\Phi_i = U_i/\sqrt{c}$ -- this
+relationship (not simply "SVD = POD", and not a silent unweighted shortcut) is derived in full in
+`src/rom/pod.py`'s module docstring and checked directly by
+`tests/test_rom_pod.py::test_pod_modes_are_l2_orthonormal` and
+`test_reconstructed_enstrophy_from_full_basis_matches_direct_calculation` (an ABSOLUTE, not merely
+relative, cross-check: $\sum_i a_i(t)^2 = 2\,\Omega(t)$ at full rank, matching direct enstrophy exactly).
+No mean-centering is used (see "Galerkin derivation" below for why).
+
+## Basis construction
+
+Singular-value decay and cumulative captured energy (`scripts/rom_pod_analysis.py`,
+`figures/rom_pod_singular_values_full.png`): rapid decay to a numerical noise floor ($\sim10^{-14}$)
+by mode $\sim$80-100 (of 1004 total), with cumulative energy already at 99.9999% by rank 16. The three
+leading singular values are nearly degenerate for a 4-trajectory training family
+(`figures/rom_pod_modes_full.png`), consistent with the leading modes being close to one direction per
+training realization rather than a shared "universal" turbulence structure -- directly relevant to the
+unseen-condition finding below. Ranks studied throughout: $r \in \{4, 8, 16, 32\}$.
+
+## Projection-error baseline
+
+Computed BEFORE any ROM is integrated (`scripts/rom_pod_analysis.py`,
+`results/rom_pod_projection_error_full.txt`), separating basis-truncation error from ROM dynamical
+error:
+
+| $r$ | cum. energy | train err | unseen_ic err | unseen_nu err | unseen_nu_same_ic err |
+|---|---|---|---|---|---|
+| 4 | 0.9591 | 2.359e-01 | 9.995e-01 | 9.961e-01 | 4.218e-01 |
+| 8 | 0.99875 | 3.853e-02 | 9.976e-01 | 9.943e-01 | 1.618e-01 |
+| 16 | 0.999999 | 9.926e-04 | 9.938e-01 | 9.875e-01 | 5.293e-02 |
+| 32 | 1.000000 | 8.781e-07 | 9.914e-01 | 9.805e-01 | 4.096e-02 |
+
+**Central honest finding.** A basis built from 4 training realizations reconstructs its OWN training
+data almost perfectly, but a genuinely NEW random-phase realization -- even at the identical
+viscosity -- is captured almost NOT AT ALL (relative error $\approx0.99$, essentially flat across
+rank). This is not a truncation-severity artefact: using the ENTIRE training span as the basis
+(rank = 1004 of 1004, tested at `local`-config scale in development) still leaves $\approx$80%
+relative error on an unseen realization. The `unseen_nu_same_ic` CONTROL -- literally reusing
+train1's exact phase pattern at a different viscosity -- transfers well and keeps improving with rank
+(0.42 $\to$ 0.16 $\to$ 0.05 $\to$ 0.04), isolating the cause precisely: **the failure is driven by
+phase/translation mismatch between independent random-noise realizations, not by the viscosity
+parameter shift itself.** This is a well-known but easy-to-overlook limitation of snapshot POD built
+from few trajectories of a flow whose coherent structures are randomly located per realization
+(unlike, e.g., a smoothly-parameterized family of steady states, where POD/ROM parameter transfer is
+typically much better behaved). See "Unseen-condition evaluation" and "Limitations" below; this
+finding is preserved exactly as found, not engineered away by adding more training seeds until it
+disappears.
+
+## Galerkin derivation
+
+Training data is FREELY DECAYING (unforced, non-stationary) turbulence: there is no statistically
+steady "mean flow" for a time-average to meaningfully represent, so this project uses the PURE
+POD-mode expansion $\omega_r = \sum_{i=1}^r a_i(t)\phi_i(x)$ (no mean-centering term). Substituting
+into $\partial_t\omega + u(\omega)\cdot\nabla\omega = \nu\nabla^2\omega$ and projecting onto each test
+mode $\phi_k$ (using $L^2$-orthonormality) gives, since $u(\omega_r)$ and $\nabla\omega_r$ are both
+LINEAR in $a$:
+
+$$\frac{da_k}{dt} = \nu\sum_j L_{kj}a_j + \sum_{i,j} Q_{kij}\,a_i a_j,$$
+
+$$L_{kj} = \langle \nabla^2\phi_j,\ \phi_k\rangle \quad\text{(linear viscous operator, } r\times r\text{)}, \qquad Q_{kij} = -\langle u_i\,\partial_x\phi_j + v_i\,\partial_y\phi_j,\ \phi_k\rangle \quad\text{(quadratic convective tensor, } r\times r\times r\text{)},$$
+
+with $u_i, v_i$ the velocity recovered from mode $\phi_i$ ALONE (the same streamfunction-Poisson
+solve/velocity-recovery already verified in Part I, applied to a mode field instead of a full
+vorticity field). No constant or forcing term appears (no mean-centering, no external forcing). Both
+operators are precomputed ONCE, offline (`src/rom/galerkin.py:build_galerkin_operators`); online
+evaluation is `A_lin @ a + einsum("kij,i,j->k", Q, a, a)`, $O(r^3)$, with NO grid-sized operation at
+all -- exploiting the quadratic structure exactly, per the project brief, rather than reconstructing
+the full field and calling the FOM's own right-hand side at every step (that IS built and benchmarked
+explicitly, as the "naive baseline" below, never as the recommended method).
+
+## Reduced operators: independent verification
+
+For random reduced states $a$, `src/rom/galerkin.py:verify_operators` compares the precomputed-tensor
+evaluation against the PROJECTED FULL FOM right-hand side (reconstruct $\omega_r=\Phi a$, evaluate
+the FOM's own nonlinear+viscous RHS at that field, project back). These are algebraically IDENTICAL
+by construction (FFT, the 2/3-rule dealiasing mask, and the $L^2$ inner product are all linear
+operations applied to an EXACTLY-distributed bilinear expansion -- not an approximation), so agreement
+should be at numerical, not truncation-level, precision (`scripts/rom_verify_operators.py`,
+`results/rom_operator_verification_full.txt`):
+
+| $r$ | dealias | max abs. discrepancy | relative |
+|---|---|---|---|
+| 4 | True/False | 4-6e-16 | $\sim10^{-15}$ |
+| 8 | True/False | 4-4e-16 | $\sim7\times10^{-16}$ |
+| 16 | True/False | 4-6e-15 | $\sim3$-$6\times10^{-15}$ |
+| 32 | True/False | 1.1-1.4e-14 | $\sim2$-$3\times10^{-15}$ |
+
+Confirmed to machine precision at every tested rank, with and without dealiasing, BEFORE any ROM
+trajectory was trusted (`tests/test_rom_galerkin.py`, 9 tests).
+
+## ROM dynamics
+
+Integrated with a matrix-exponential generalization of Part I's own integrating-factor RK4 scheme
+(`exp(nu*L*h)` via `scipy.linalg.expm`, since the reduced viscous operator is a dense $r\times r$
+matrix rather than Part I's diagonal one -- same derivation, same treatment of the nonlinear term with
+explicit RK4). Baseline rank sweep on the TRAINING trajectory (`scripts/rom_baseline_evaluation.py`,
+`results/rom_baseline_evaluation_full.txt`):
+
+| $r$ | mean state err | mean $E$ err | mean $\Omega$ err | runtime (s, 3-trajectory-worth of steps) |
+|---|---|---|---|---|
+| 4 | 2.435e-01 | 3.039e-01 | 1.385e-01 | 0.09 |
+| 8 | 3.882e-02 | 3.504e-02 | 4.573e-03 | 0.07 |
+| 16 | 9.894e-04 | 4.980e-04 | 6.044e-06 | 0.22 |
+| 32 | 8.821e-07 | 2.071e-07 | 3.671e-10 | 0.56 |
+
+State error tracks the projection-error floor closely and improves cleanly with rank (compare to the
+"Projection-error baseline" table above); by $r=32$ the ROM reproduces the training trajectory to
+$<10^{-6}$ relative error, visually indistinguishable from the FOM
+(`figures/rom_vorticity_snapshots_full.png`).
+
+## Stability analysis
+
+POD-Galerkin ROMs of nonlinear flows are well known to sometimes go unstable or become systematically
+under-dissipative, because truncating modes removes part of the pathway through which energy reaches
+small scales and dissipates (Sirovich 1987). This was INVESTIGATED, not assumed
+(`scripts/rom_stability.py`): the ROM was integrated to $10\times$ the training time window (t=30 vs.
+training t=3), for both the training and unseen-IC cases, at every tested rank, tracking
+coefficient-amplitude norm and kinetic energy
+(`figures/rom_stability_full.png`, `results/rom_stability_full.txt`):
+
+| $r$ | case | stable | max E | final E | monotonic decay |
+|---|---|---|---|---|---|
+| 4 | train | True | 2.032e-02 | 1.619e-16 | True |
+| 8 | train | True | 1.540e-02 | 5.557e-11 | True |
+| 16 | train | True | 1.577e-02 | 5.262e-08 | True |
+| 32 | train | True | 1.578e-02 | 2.585e-06 | True |
+| 4-32 | unseen_ic | True | -- | -- | True |
+
+**No instability or spurious energy growth was found at ANY tested rank, condition, or horizon.**
+Reduced-coefficient amplitude and kinetic energy decay smoothly and monotonically to numerical zero
+in every case. Per the project brief's own instruction, a stabilization scheme (spectral/eddy
+viscosity or similar) is NOT added, because none is needed for this flow class -- a plausible
+explanation, not proven here, is that this flow is unforced and globally dissipative (bounded,
+monotonically decreasing energy with no sustained energy injection), unlike the forced/statistically-
+steady turbulence for which the classical POD-Galerkin blow-up failure mode is usually reported, so
+even an imperfect truncated reduced dynamics tends to decay rather than accumulate spurious energy.
+
+## Hyper-reduction (DEIM)
+
+After the exact tensorized ROM was verified and found to already be $O(r^3)$ with no grid-sized
+operation (i.e. the nonlinear-evaluation bottleneck the brief asks DEIM to address does not exist for
+this exactly-quadratic nonlinearity -- see `src/rom/deim.py` module docstring), DEIM
+(Chaturantabut & Sorensen, 2010) was still implemented and INDEPENDENTLY VERIFIED, to test this
+directly rather than assume it, and to build the explicit "naive" full-reconstruction baseline the
+brief asks for regardless.
+
+**A genuine methodological finding surfaced during verification, not a coding bug**: DEIM approximates
+a nonlinear function by evaluating it POINTWISE at $m$ selected grid points. The FOM's dealiased
+advection term is NOT a pointwise-evaluable function -- the 2/3-rule dealiasing mask is applied in
+FOURIER space, a genuinely GLOBAL operation, so its value at one grid point depends on the entire
+field. Comparing DEIM's natural (pointwise, effectively undealiased) approximation against the
+DEALIASED reduced nonlinear term therefore showed large, rank-independent discrepancy on first
+attempt; comparing it against the mathematically-consistent (undealiased) reference resolved this
+completely and immediately recovered clean, rank-monotonic convergence (`tests/test_rom_deim.py`
+documents both the correct comparison and a direct measurement of how much the dealiasing choice
+itself matters). This distinction -- and the fact that it is SMALL at well-resolved grids -- is
+reported explicitly rather than glossed over:
+
+DEIM error vs. DEIM rank $m$ (state rank fixed at $r=32$) and vs. state rank $r$ (DEIM rank fixed at
+$m=32$) -- studied independently, per the brief (`scripts/rom_hyperreduction.py`,
+`results/rom_hyperreduction_full.txt`):
+
+| $m$ (r=32 fixed) | hyper-reduction error | | $r$ (m=32 fixed) | hyper-reduction error |
+|---|---|---|---|---|
+| 8 | 2.660e-01 | | 4 | 1.558e-01 |
+| 16 | 1.549e-02 | | 8 | 6.197e-02 |
+| 32 | 2.689e-05 | | 16 | 3.921e-03 |
+| | | | 32 | 2.689e-05 |
+
+**Dealiasing mismatch** (dealiased vs. undealiased projected nonlinear term, $r=32$, what DEIM's
+implicit undealiased evaluation costs relative to the trusted, dealiased tensor ROM): relative
+difference $5.97\times10^{-7}$ at this ($N=96$) resolution -- negligible, because the POD test modes
+have little overlap with the specific high-wavenumber content the 2/3 rule removes once the grid is
+well resolved relative to those modes (measured explicitly at $N=24$ during development: $\sim0.15$-
+$0.19$, NOT negligible at that coarser resolution -- documented in
+`tests/test_rom_deim.py::test_dealiasing_mismatch_is_small_at_well_resolved_grid`).
+
+**Three separate error sources**, on the training trajectory at $r=32$, $m=32$:
+
+| source | value |
+|---|---|
+| Galerkin dynamical error (tensor ROM vs. FOM) | 8.821e-07 |
+| hyper-reduction error (DEIM ROM vs. tensor ROM, SAME state rank) | 2.513e-08 |
+
+Hyper-reduction error is an order of magnitude smaller than the Galerkin dynamical error already
+present -- DEIM adds little on top of an already near-exact ROM.
+
+## Accuracy-cost trade-off
+
+The central, most practically relevant result of Part II (`scripts/rom_performance_benchmark.py`,
+Apple M3 Pro, macOS-26.6.2-arm64, Python 3.12.2, NumPy 2.0.0, float64/complex128, single-threaded
+`numpy.fft`, 5 warm-up steps discarded, median of 3 repeats of 30 timed steps -- same methodology as
+Part I's `benchmark_runtime.py`). Online cost per $0.03$ simulated time units, $N=96$, $r=32$,
+$m=32$ (`results/rom_performance_benchmark_full.txt`):
+
+| method | median (ms) | speed-up vs. FOM |
+|---|---|---|
+| FOM | 50.646 | 1.00x |
+| tensor ROM (recommended) | 8.453 | 5.99x |
+| naive baseline (reconstruct + call FOM RHS every step) | 124.032 | **0.41x (SLOWER than the FOM)** |
+| DEIM-hyper-reduced ROM | 2.252 | 22.49x |
+
+The naive baseline is explicitly built and timed as an intermediate reference, per the brief, NOT as
+a candidate method: it is slower than just running the FOM, since it pays full-grid FFT cost on top
+of the ROM's own reduced-state bookkeeping, with none of the FOM's own optimizations. **DEIM
+overtakes the exact tensor method at this (largest tested, $r=32$) rank**, because $O(rm)=1024 <
+O(r^3)=32768$ once $r$ is large enough -- a genuine crossover, not a fixed ranking. At the SMALLER
+ranks that already give excellent accuracy here ($r\le16$; see below), the tensor method remains both
+more accurate (exact vs. approximate) and typically cheaper, since its fixed per-call overhead is
+lower even though its asymptotic exponent is worse (confirmed directly: at $r=16$, `local`-config
+measurements during development showed the tensor method winning; only at $r=32$-scale does the
+crossover appear -- see `results/rom_performance_benchmark_{local,full}.txt` for both regimes). DEIM's
+practical value here is therefore real but narrow: useful specifically when large-$r$ accuracy AND
+minimal online cost are both required simultaneously; for the accuracy levels needed in this project,
+the exact tensor method is the recommended default.
+
+Accuracy vs. online speed-up across rank, tensor ROM, training trajectory:
+
+| $r$ | mean state err | speed-up vs. FOM |
+|---|---|---|
+| 4 | 2.435e-01 | 86.89x |
+| 8 | 3.882e-02 | 77.32x |
+| 16 | 9.894e-04 | 38.50x |
+| 32 | 8.821e-07 | 5.68x |
+
+$r=16$ is the clear practical sweet spot at this resolution: <0.1% state error at nearly 40x online
+speed-up (`figures/rom_accuracy_speed_tradeoff_full.png`).
+
+**Offline cost** (one-time, $r=32$, $m=32$, explicitly separated from online/per-step cost, per the
+brief): POD SVD 0.659 s, Galerkin tensor construction 0.537 s, nonlinear-snapshot construction
+0.502 s, DEIM basis + point selection 0.611 s (total 2.31 s) -- on top of FOM snapshot GENERATION
+itself, which is the dominant offline cost at $\approx$36 s for the full training+evaluation ensemble
+(`scripts/rom_generate_snapshots.py --config full`, timed separately, since it is the same cost as
+just running the FOM directly and is not a ROM-specific expense). All "speed-up" numbers above are
+ONLINE-only comparisons of equivalent physical simulated time; offline cost is never folded into them.
+
+## Unseen-condition evaluation
+
+Distinguished explicitly throughout (never using "generalization" without saying what changed):
+
+- **Reconstruction / training-family**: ROM started from a training trajectory's own initial
+  condition. Excellent and improving cleanly with rank (see "ROM dynamics" above).
+- **Unseen initial condition** (`unseen_ic`: new seed, SAME $\nu=0.008$): mean state error
+  $\approx0.99$ at every tested rank -- the ROM cannot do better than its own projection-error floor,
+  and that floor is $\approx0.99$ here (see "Projection-error baseline").
+- **Unseen parameter** (`unseen_nu`: new seed, $\nu=0.016$, double the training value): mean state
+  error also $\approx0.98$-$0.99$ -- similarly dominated by the phase mismatch, since this trajectory
+  ALSO uses a new, untrained-on random seed.
+- **Control** (`unseen_nu_same_ic`: train1's exact phase, $\nu=0.016$): mean state error 0.0412 at
+  $r=32$ (`results/rom_baseline_evaluation_full.txt`), improving cleanly with rank, essentially
+  matching the training-trajectory error trend -- confirming that pure viscosity transfer (holding
+  phase fixed) works well; it is the PHASE mismatch inherent to `unseen_ic`/`unseen_nu`'s fresh random
+  seeds that dominates their failure, not viscosity extrapolation itself. This separation exists
+  BECAUSE an earlier, less careful version of this experiment (documented in the Part 1 commit)
+  accidentally reused a training seed for the "unseen viscosity" case, confounding the two effects and
+  making transfer look artificially good.
+
+This is reported as the project's primary "if the ROM performs badly outside its snapshot regime"
+finding (per the brief): snapshot POD/Galerkin-ROM, built from a handful of independent random-phase
+realizations, does not straightforwardly generalize across realizations, even at matched physical
+parameters -- a real, useful, and under-discussed limitation of this modelling approach for problems
+whose coherent structures are not tied to a fixed spatial location or a smoothly-parameterized family.
+
+## Limitations (Part II)
+
+- **Cross-realization generalization fails**, as documented at length above -- the central limitation
+  of this ROM. Likely mitigations NOT attempted here (would require materially more compute/scope):
+  training on many more (tens to hundreds of) independent realizations, or a translation-equivariant
+  reduction method (e.g. a Fourier-mode truncation, or POD applied after registering/aligning
+  coherent structures across realizations).
+- **DEIM's natural approximation target is the UNDEALIASED advection**, not the dealiased one the
+  trusted ROM actually uses; this project quantifies and reports the resulting (small, at well-
+  resolved grids) discrepancy rather than treating DEIM as exactly interchangeable with the tensor
+  method's dealiased evaluation.
+- **DEIM provides no practical benefit at this project's recommended operating point** ($r\le16$):
+  its crossover advantage over the exact tensor method only appears at the largest tested rank
+  ($r=32$), where the tensor method's $O(r^3)$ cost is no longer negligible; ranks were not pushed
+  higher to explore this further.
+- **Single training family per configuration** (4 trajectories at `full` scale, all at one $k_0$);
+  no systematic study of how many/which training trajectories are needed for better cross-realization
+  transfer.
+- **Freely decaying (unforced) flow only.** The stability finding (no instability, no stabilization
+  needed) is specific to this globally-dissipative flow class and should NOT be assumed to hold for
+  forced or statistically-steady turbulence, where the classical POD-Galerkin instability failure mode
+  is most often reported in the literature.
+- **No systematic time-step or `save_every` sensitivity study for the ROM integrator** (inherited the
+  FOM's own $dt$ throughout); the reduced system's own stiffness/accuracy trade-off vs. step size was
+  not independently characterised.
+- **CPU-only, single-threaded**, as in Part I; no claim of GPU acceleration or further low-level
+  optimization of either the FOM or ROM code paths.
+
+## Comparison with `neural-surrogate-burgers`
+
+That project used POD and DEIM on the (simpler, 1D, scalar) viscous Burgers equation as a
+methodological benchmark, alongside a neural-operator (FNO) surrogate. This project studies
+POD-Galerkin ROM behaviour for a genuinely 2D, incompressible, vector-velocity-coupled nonlinear flow,
+with physical diagnostics (kinetic energy, enstrophy) that have no Burgers analogue, an explicit
+projection-error-vs-dynamical-error separation, an investigated (not assumed) stability question, and
+a cross-realization generalization failure mode specific to a flow whose coherent structures are
+randomly located per realization -- none of which arise in the same way for Burgers. No results are
+copied between the two projects; Burgers is cited here only as prior, simpler methodological
+experience with the same two reduction techniques (POD, DEIM), not reused code.
+
+## Reproducibility (Part II)
+
+Every quantitative figure/number in this section is written to `results/rom_*_{config}.txt` (or a
+`.png` in `figures/`) by the script named alongside it; nothing here was hand-computed or estimated.
+`scripts/rom_generate_snapshots.py` must be run before any other `rom_*.py` script for a given
+config. All random draws (initial-condition seeds, the Taylor-remainder-style random test states in
+`verify_operators`) use fixed, explicit seeds.
 
 ## Repository structure
 
@@ -289,13 +644,19 @@ runs on CPU in double precision.
 navier-stokes-2d/
 ├── README.md
 ├── requirements.txt
-├── src/                  solver package (see "Implementation")
-├── tests/                21 pytest tests: operators, exact solution, MMS, diagnostics, solver
+├── src/                  Part I solver package (see "Implementation"), UNCHANGED by Part II
+│   └── rom/               Part II: snapshots.py, pod.py, galerkin.py, deim.py
+├── tests/                53 pytest tests: 21 Part I (operators, exact solution, MMS, diagnostics,
+│                          solver) + 32 Part II (snapshots, POD, Galerkin, DEIM, stability)
 ├── examples/              taylor_green.py, decaying_turbulence.py
-├── scripts/                derive_mms_forcing.py, convergence_temporal.py, convergence_spatial.py,
-│                            benchmark_runtime.py
-├── configs/                smoke.yaml, local.yaml, full.yaml (decaying-turbulence resolution presets)
-├── figures/                 generated PNGs (validation, convergence, turbulence diagnostics)
+├── scripts/                Part I: derive_mms_forcing.py, convergence_temporal.py,
+│                            convergence_spatial.py, benchmark_runtime.py
+│                          Part II: rom_generate_snapshots.py, rom_pod_analysis.py,
+│                            rom_verify_operators.py, rom_baseline_evaluation.py, rom_stability.py,
+│                            rom_hyperreduction.py, rom_performance_benchmark.py
+├── configs/                smoke.yaml, local.yaml, full.yaml (decaying-turbulence AND `rom:` presets)
+├── figures/                 generated PNGs (Part I validation/convergence/turbulence; Part II
+│                            rom_*.png)
 └── results/                  generated text/NPZ outputs backing every number quoted above
 ```
 
@@ -303,7 +664,8 @@ navier-stokes-2d/
 
 Requires Python $\geq 3.10$ (tested on 3.12). Dependencies: `numpy`, `scipy`, `matplotlib`, `pytest`,
 `sympy` (manufactured-solution derivation only, not needed by the solver itself at run time beyond
-the manufactured-solution module), `pyyaml` (config files).
+the manufactured-solution module), `pyyaml` (config files). Part II uses only these same dependencies
+(`scipy.linalg.expm` for the ROM integrator's matrix exponential; no new dependency was added).
 
 ```bash
 cd navier-stokes-2d
@@ -316,23 +678,22 @@ pip install -r requirements.txt
 # tests (run first; all downstream results assume these pass)
 pytest tests/ -v
 
-# Taylor-Green vortex validation
+# --- Part I ---
 python examples/taylor_green.py
-
-# decaying 2D turbulence (smoke / local / full)
-python examples/decaying_turbulence.py --config smoke
-python examples/decaying_turbulence.py --config local
-python examples/decaying_turbulence.py --config full
-
-# convergence studies
+python examples/decaying_turbulence.py --config smoke   # or local / full
 python scripts/convergence_temporal.py
 python scripts/convergence_spatial.py
-
-# runtime benchmark
 python scripts/benchmark_runtime.py
+python scripts/derive_mms_forcing.py   # optional: regenerate the MMS forcing derivation
 
-# (optional) regenerate the manufactured-solution forcing derivation
-python scripts/derive_mms_forcing.py
+# --- Part II (run rom_generate_snapshots.py first for a given config; others depend on its output) ---
+python scripts/rom_generate_snapshots.py --config full   # or smoke / local
+python scripts/rom_pod_analysis.py --config full
+python scripts/rom_verify_operators.py --config full
+python scripts/rom_baseline_evaluation.py --config full
+python scripts/rom_stability.py --config full
+python scripts/rom_hyperreduction.py --config full
+python scripts/rom_performance_benchmark.py --config full
 ```
 
 ## References
@@ -356,3 +717,29 @@ methodological experience from an earlier project, `Master-Thesis` (Udine MSc th
 Doering optimal-mixing solver, pseudo-spectral with Leray projection). That code was not reused here;
 this solver was implemented independently, targeting the (different) Navier-Stokes vorticity-
 transport problem and its own validation suite.
+
+**Part II references:**
+
+- Sirovich, L. (1987). "Turbulence and the dynamics of coherent structures, Parts I-III." *Q. Appl.
+  Math.* 45(3), 561-590. (Introduces the method of snapshots for POD.)
+- Holmes, P., Lumley, J. L., Berkooz, G., Rowley, C. W. (2012). *Turbulence, Coherent Structures,
+  Dynamical Systems and Symmetry* (2nd ed.). Cambridge University Press. (Standard POD-Galerkin
+  reference, incl. stability/closure discussion.)
+- Chatterjee, A. (2000). "An introduction to the proper orthogonal decomposition." *Curr. Sci.* 78(7),
+  808-817. (Accessible derivation of POD as an SVD/eigenvalue problem.)
+- Rowley, C. W. (2005). "Model reduction for fluids, using balanced proper orthogonal decomposition."
+  *Int. J. Bifurcation Chaos* 15(3), 997-1013. (POD-Galerkin ROM for fluid flow, incl. stability
+  considerations.)
+- Chaturantabut, S., Sorensen, D. C. (2010). "Nonlinear model reduction via discrete empirical
+  interpolation." *SIAM J. Sci. Comput.* 32(5), 2737-2764. (DEIM: basis, greedy point selection,
+  reduced nonlinear evaluation, as implemented in `src/rom/deim.py`.)
+- Sirovich, L. (1987), as above; and Bergmann, M., Bruneau, C.-H., Iollo, A. (2009). "Enablers for
+  robust POD models." *J. Comput. Phys.* 228(2), 516-538. (Cited for context on POD-Galerkin
+  stability/closure strategies; no closure was ultimately implemented here -- see "Stability
+  analysis", none was found to be needed for this flow class.)
+
+**Comparison with prior related work.** `neural-surrogate-burgers` used POD and DEIM on 1D viscous
+Burgers as a simpler methodological benchmark alongside a neural-operator (FNO) surrogate; see
+"Comparison with `neural-surrogate-burgers`" above for how this project extends that experience to a
+genuinely 2D, vector-coupled, physically-diagnosed flow. No results or code are shared between the
+two repositories.
