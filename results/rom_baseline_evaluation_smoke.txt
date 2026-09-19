@@ -1,0 +1,11 @@
+Baseline POD-Galerkin ROM evaluation (smoke): grid 24x24
+
+   r               case  stable  mean state err  final state err  mean E err  mean Omega err  runtime(s)
+   2              train    True    3.128654e-02     6.346376e-02 3.558400e-02    1.984339e-03      0.0059
+   2          unseen_ic    True    9.918525e-01     9.917835e-01 9.856154e-01    9.841300e-01      0.0030
+   2          unseen_nu    True    9.988829e-01     9.989763e-01 9.980501e-01    9.977116e-01      0.0059
+   2  unseen_nu_same_ic    True    7.405621e-02     1.663050e-01 9.312998e-02    1.456840e-02      0.0059
+   4              train    True    8.213362e-04     2.073295e-03 7.016140e-04    3.436844e-06      0.0060
+   4          unseen_ic    True    9.855277e-01     9.850239e-01 9.737632e-01    9.733816e-01      0.0038
+   4          unseen_nu    True    9.961934e-01     9.965518e-01 9.936027e-01    9.931550e-01      0.0065
+   4  unseen_nu_same_ic    True    1.343775e-02     3.172274e-02 9.415493e-03    9.042260e-04      0.0028

@@ -1,0 +1,15 @@
+Baseline POD-Galerkin ROM evaluation (local): grid 64x64
+
+   r               case  stable  mean state err  final state err  mean E err  mean Omega err  runtime(s)
+   4              train    True    1.599377e-01     3.354952e-01 1.869000e-01    5.484274e-02      0.0583
+   4          unseen_ic    True    9.957494e-01     9.957322e-01 9.938118e-01    9.934269e-01      0.0651
+   4          unseen_nu    True    9.981559e-01     9.986104e-01 9.990747e-01    9.986897e-01      0.0376
+   4  unseen_nu_same_ic    True    3.299983e-01     6.452695e-01 4.250178e-01    2.536227e-01      0.0368
+   8              train    True    2.984846e-03     9.908064e-03 1.647912e-03    3.153766e-05      0.0488
+   8          unseen_ic    True    9.856922e-01     9.838484e-01 9.516717e-01    9.703571e-01      0.0593
+   8          unseen_nu    True    9.930021e-01     9.914570e-01 9.923724e-01    9.940068e-01      0.0424
+   8  unseen_nu_same_ic    True    5.852017e-02     1.474737e-01 4.768599e-02    1.548210e-02      0.0547
+  16              train    True    3.104627e-05     1.296985e-04 1.025066e-05    6.566375e-08      0.1102
+  16          unseen_ic    True    9.848287e-01     9.844746e-01 9.471612e-01    9.673212e-01      0.1208
+  16          unseen_nu    True    9.853632e-01     9.806117e-01 9.205710e-01    9.642882e-01      0.2019
+  16  unseen_nu_same_ic    True    4.099063e-02     6.070448e-02 8.655726e-03    6.490071e-03      0.1157

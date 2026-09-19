@@ -1,0 +1,7 @@
+Galerkin reduced-operator verification (smoke config): grid 24x24
+
+   r  dealias   max |tensor - projected FOM RHS|    typical RHS magnitude     relative
+   2     True                       6.661338e-16             6.602698e-01 1.008881e-15
+   2    False                       9.992007e-16             6.597342e-01 1.514550e-15
+   4     True                       9.992007e-16             7.205509e-01 1.386718e-15
+   4    False                       1.221245e-15             7.214859e-01 1.692681e-15
