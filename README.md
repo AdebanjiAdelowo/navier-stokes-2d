@@ -373,7 +373,8 @@ from few trajectories of a flow whose coherent structures are randomly located p
 (unlike, e.g., a smoothly-parameterized family of steady states, where POD/ROM parameter transfer is
 typically much better behaved). See "Unseen-condition evaluation" and "Limitations" below; this
 finding is preserved exactly as found, not engineered away by adding more training seeds until it
-disappears.
+disappears. Projection error vs. rank (all four cases) and vs. time (train and unseen_ic) are plotted
+in `figures/rom_projection_error_vs_rank_full.png` and `figures/rom_projection_error_vs_time_full.png`.
 
 ## Galerkin derivation
 
@@ -433,9 +434,11 @@ explicit RK4). Baseline rank sweep on the TRAINING trajectory (`scripts/rom_base
 | 32 | 8.821e-07 | 2.071e-07 | 3.671e-10 | 0.56 |
 
 State error tracks the projection-error floor closely and improves cleanly with rank (compare to the
-"Projection-error baseline" table above); by $r=32$ the ROM reproduces the training trajectory to
-$<10^{-6}$ relative error, visually indistinguishable from the FOM
-(`figures/rom_vorticity_snapshots_full.png`).
+"Projection-error baseline" table above; plotted in `figures/rom_state_error_vs_rank_full.png` and,
+over time, `figures/rom_error_vs_time_full.png`); by $r=32$ the ROM reproduces the training trajectory
+to $<10^{-6}$ relative error, visually indistinguishable from the FOM
+(`figures/rom_vorticity_snapshots_full.png`). Kinetic energy and enstrophy, FOM vs. ROM, are compared
+in `figures/rom_energy_enstrophy_comparison_full.png`.
 
 ## Stability analysis
 
@@ -496,6 +499,8 @@ $m=32$) -- studied independently, per the brief (`scripts/rom_hyperreduction.py`
 | 32 | 2.689e-05 | | 16 | 3.921e-03 |
 | | | | 32 | 2.689e-05 |
 
+Both trends (`figures/rom_deim_error_vs_rank_full.png`).
+
 **Dealiasing mismatch** (dealiased vs. undealiased projected nonlinear term, $r=32$, what DEIM's
 implicit undealiased evaluation costs relative to the trusted, dealiased tensor ROM): relative
 difference $5.97\times10^{-7}$ at this ($N=96$) resolution -- negligible, because the POD test modes
@@ -512,7 +517,8 @@ $0.19$, NOT negligible at that coarser resolution -- documented in
 | hyper-reduction error (DEIM ROM vs. tensor ROM, SAME state rank) | 2.513e-08 |
 
 Hyper-reduction error is an order of magnitude smaller than the Galerkin dynamical error already
-present -- DEIM adds little on top of an already near-exact ROM.
+present -- DEIM adds little on top of an already near-exact ROM (both error trajectories over time
+plotted together in `figures/rom_error_decomposition_full.png`).
 
 ## Accuracy-cost trade-off
 
