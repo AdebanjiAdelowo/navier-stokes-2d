@@ -511,6 +511,13 @@ to $<10^{-6}$ relative error, visually indistinguishable from the FOM
 (`figures/rom_vorticity_snapshots_full.png`). Kinetic energy and enstrophy, FOM vs. ROM, are compared
 in `figures/rom_energy_enstrophy_comparison_full.png`.
 
+![FOM and rank-32 ROM vorticity on the training trajectory at t = 0, 1, 2, 3](figures/rom_vorticity_snapshots_full.png)
+
+*FOM (top) vs. tensor POD-Galerkin ROM at $r=32$ (bottom), training trajectory, `full` config
+(`scripts/rom_baseline_evaluation.py`). Each column shares one symmetric colour scale. This is
+in-sample reconstruction, the ROM's best case; on a new random-phase realization the error stays
+near 1 (see "Unseen-condition evaluation").*
+
 ## Stability analysis
 
 POD-Galerkin ROMs of nonlinear flows are well known to sometimes go unstable or become systematically
