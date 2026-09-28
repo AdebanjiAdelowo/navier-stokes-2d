@@ -17,7 +17,7 @@ proposing a new one. The goal is to demonstrate the complete workflow expected o
 numerical-PDE implementation: formulate the equations, choose and justify a discretisation,
 implement it as reusable code, verify it against problems with known answers (an exact solution and
 a manufactured solution), quantify convergence rates, verify physical diagnostics (incompressibility,
-the viscous energy-dissipation budget), and only then use the solver for a genuine flow-physics
+the viscous energy-dissipation budget), and only then use the solver for a flow-physics
 experiment. Part II treats this verified solver as a trusted full-order model (FOM) and demonstrates
 reduced-order modelling as applied mathematics: every reduction step (POD truncation, Galerkin
 projection, hyper-reduction) is derived, then checked against an independent reference BEFORE being
@@ -99,8 +99,8 @@ incompressible flow and turbulence studies (Orszag, 1971; Canuto et al., 2006).
   -k_xk_y\hat\psi + k_xk_y\hat\psi \equiv 0$ **identically**, to machine precision, by construction
   (verified in `tests/test_operators.py::test_velocity_from_psi_is_divergence_free` and tracked
   through full runs by the `max_divergence` diagnostic).
-- *Nonlinear advection* (`src/rhs.py`): $\mathbf{u}\cdot\nabla\omega$ is evaluated pseudo-spectrally
-  — $u, v, \omega_x, \omega_y$ are computed in Fourier space and transformed to physical space by
+- *Nonlinear advection* (`src/rhs.py`): $\mathbf{u}\cdot\nabla\omega$ is evaluated pseudo-spectrally:
+  $u, v, \omega_x, \omega_y$ are computed in Fourier space and transformed to physical space by
   inverse FFT, multiplied pointwise, and transformed back. This quadratic product aliases energy from
   wavenumber pairs whose sum exceeds the resolvable range back into the resolved range; the standard
   2/3-rule filter (Orszag, 1971), applied in `operators.dealias_mask` and `rhs.vorticity_rhs`, removes
@@ -200,8 +200,7 @@ error $=3.3\times10^{-15}$**. A temporal convergence sweep at fixed, fully resol
 
 confirming clean **4th-order** convergence of the RK4 nonlinear-term integration down to the point
 where the error reaches the double-precision floor ($\sim10^{-15}$), after which the observed order
-degrades because roundoff, not truncation error, dominates — expected behaviour, reported honestly
-rather than cut off at a flattering point. Reproduce with `python scripts/convergence_temporal.py`
+degrades because roundoff, not truncation error, dominates; the full range is shown. Reproduce with `python scripts/convergence_temporal.py`
 (figure: `figures/convergence_temporal.png`).
 
 <p align="center">
@@ -248,7 +247,7 @@ identically-zero divergence derived above.
 
 ### 1. Taylor-Green vortex (exact-solution validation)
 
-`python examples/taylor_green.py` — $N=64$, $\nu=0.05$, $k=2$, $t_{\mathrm{end}}=0.3$. Produces
+`python examples/taylor_green.py`: $N=64$, $\nu=0.05$, $k=2$, $t_{\mathrm{end}}=0.3$. Produces
 `figures/taylor_green_validation.png` (initial field, final numerical field, pointwise error).
 
 ### 2. Decaying 2D turbulence (second flow benchmark)
@@ -257,10 +256,10 @@ There is no closed-form solution for freely decaying 2D turbulence, so this benc
 through physical diagnostics rather than a pointwise comparison. The initial vorticity is an
 isotropic random field with Fourier amplitude shaped by a bump function peaked at wavenumber $k_0$
 (`src/initial_conditions.py`; energy concentrated at intermediate scales, the standard qualitative
-setup for this class of problem, e.g. McWilliams, 1984 — the specific envelope used is our own
+setup for this class of problem, e.g. McWilliams, 1984; the specific envelope used is our own
 simple choice, not a reproduction of any particular paper's exact spectrum).
 
-`python examples/decaying_turbulence.py --config local` — $N=128$, $\nu=0.01$, $k_0=8$,
+`python examples/decaying_turbulence.py --config local`: $N=128$, $\nu=0.01$, $k_0=8$,
 $t_{\mathrm{end}}=4$ (runtime: 6.0 s on the benchmark hardware below):
 
 - Kinetic energy decays **monotonically**, $E: 0.01549\to0.00123$ (92% loss).
@@ -270,7 +269,7 @@ $t_{\mathrm{end}}=4$ (runtime: 6.0 s on the benchmark hardware below):
 - $\max|\nabla\cdot\mathbf{u}|$ over the run: $1.34\times10^{-17}$.
 - Vorticity snapshots (figure: `figures/decaying_turbulence_snapshots_local.png`) show the
   qualitatively expected coarsening: small-scale vortices merge into fewer, larger, longer-lived
-  structures as the flow decays — the well-known inverse-cascade-like phenomenology of 2D turbulence,
+  structures as the flow decays, the well-known inverse-cascade-like phenomenology of 2D turbulence,
   shown here as a qualitative observation, not a quantitatively fitted scaling law.
 
 ![Vorticity snapshots of decaying 2D turbulence at t = 0, 1, 2, 3, 4](figures/decaying_turbulence_snapshots_local.png)
@@ -421,9 +420,9 @@ error:
 | 16 | 0.999999 | 9.926e-04 | 9.938e-01 | 9.875e-01 | 5.293e-02 |
 | 32 | 1.000000 | 8.781e-07 | 9.914e-01 | 9.805e-01 | 4.096e-02 |
 
-**Central honest finding.** A basis built from 4 training realizations reconstructs its OWN training
-data almost perfectly, but a genuinely NEW random-phase realization -- even at the identical
-viscosity -- is captured almost NOT AT ALL (relative error $\approx0.99$, essentially flat across
+**Unseen-realization result.** A basis built from 4 training realizations reconstructs its own
+training data almost perfectly, but a new random-phase realization, even at the identical viscosity,
+is captured almost not at all (relative projection error $\approx0.99$, essentially flat across
 rank). This is not a truncation-severity artefact: using the ENTIRE training span as the basis
 (rank = 1004 of 1004, tested at `local`-config scale in development) still leaves $\approx$80%
 relative error on an unseen realization. The `unseen_nu_same_ic` CONTROL -- literally reusing
@@ -433,9 +432,7 @@ phase/translation mismatch between independent random-noise realizations, not by
 parameter shift itself.** This is a well-known but easy-to-overlook limitation of snapshot POD built
 from few trajectories of a flow whose coherent structures are randomly located per realization
 (unlike, e.g., a smoothly-parameterized family of steady states, where POD/ROM parameter transfer is
-typically much better behaved). See "Unseen-condition evaluation" and "Limitations" below; this
-finding is preserved exactly as found, not engineered away by adding more training seeds until it
-disappears. Projection error vs. rank (all four cases) and vs. time (train and unseen_ic) are plotted
+typically much better behaved). See "Unseen-condition evaluation" and "Limitations" below. Projection error vs. rank (all four cases) and vs. time (train and unseen_ic) are plotted
 in `figures/rom_projection_error_vs_rank_full.png` and `figures/rom_projection_error_vs_time_full.png`.
 
 <p align="center">
@@ -522,7 +519,7 @@ near 1 (see "Unseen-condition evaluation").*
 
 POD-Galerkin ROMs of nonlinear flows are well known to sometimes go unstable or become systematically
 under-dissipative, because truncating modes removes part of the pathway through which energy reaches
-small scales and dissipates (Sirovich 1987). This was INVESTIGATED, not assumed
+small scales and dissipates (Sirovich 1987). Stability was therefore tested directly
 (`scripts/rom_stability.py`): the ROM was integrated to $10\times$ the training time window (t=30 vs.
 training t=3), for both the training and unseen-IC cases, at every tested rank, tracking
 coefficient-amplitude norm and kinetic energy
@@ -554,7 +551,7 @@ this exactly-quadratic nonlinearity -- see `src/rom/deim.py` module docstring), 
 directly rather than assume it, and to build an explicit "naive" full-reconstruction baseline for
 comparison.
 
-**A genuine methodological finding surfaced during verification, not a coding bug**: DEIM approximates
+**Dealiasing and DEIM.** DEIM approximates
 a nonlinear function by evaluating it POINTWISE at $m$ selected grid points. The FOM's dealiased
 advection term is NOT a pointwise-evaluable function -- the 2/3-rule dealiasing mask is applied in
 FOURIER space, a genuinely GLOBAL operation, so its value at one grid point depends on the entire
@@ -713,7 +710,7 @@ That project used POD and DEIM on the (simpler, 1D, scalar) viscous Burgers equa
 methodological benchmark, alongside a neural-operator (FNO) surrogate. This project studies
 POD-Galerkin ROM behaviour for a genuinely 2D, incompressible, vector-velocity-coupled nonlinear flow,
 with physical diagnostics (kinetic energy, enstrophy) that have no Burgers analogue, an explicit
-projection-error-vs-dynamical-error separation, an investigated (not assumed) stability question, and
+projection-error-vs-dynamical-error separation, a direct long-horizon stability test, and
 a cross-realization generalization failure mode specific to a flow whose coherent structures are
 randomly located per realization -- none of which arise in the same way for Burgers. No results are
 copied between the two projects; Burgers is cited here only as prior, simpler methodological
